@@ -263,6 +263,19 @@
             border-radius: 5px;
         }
 
+        /* Download bar for carousel */
+        .carousel-download-bar {
+            display: none;
+            text-align: center;
+            margin-top: 15px;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .carousel-download-bar.active {
+            display: flex;
+        }
+
         /* File Size Results */
         .results-grid {
             display: grid;
@@ -381,6 +394,10 @@
                 <div style="color:#888;">Click "Apply & View Carousel" to preview</div>
             </div>
             <div class="carousel-dots" id="carouselDots"></div>
+            <div class="carousel-download-bar" id="carouselDownloadBar">
+                <button class="btn btn-primary" id="downloadCurrentBtn">⬇️ Download Current Image</button>
+                <button class="btn btn-success" id="downloadAllDimensionsBtn">⬇️ Download All Resized</button>
+            </div>
         </div>
 
         <!-- OPTION 2: File Size -->
@@ -421,6 +438,9 @@
         const carouselSection = document.getElementById('carouselSection');
         const carouselContainer = document.getElementById('carouselContainer');
         const carouselDots = document.getElementById('carouselDots');
+        const carouselDownloadBar = document.getElementById('carouselDownloadBar');
+        const downloadCurrentBtn = document.getElementById('downloadCurrentBtn');
+        const downloadAllDimensionsBtn = document.getElementById('downloadAllDimensionsBtn');
         
         // Option 2
         const applyFileSizeBtn = document.getElementById('applyFileSizeBtn');
@@ -433,6 +453,7 @@
         const downloadAllFileSizeBtn = document.getElementById('downloadAllFileSizeBtn');
 
         let uploadedImages = [];
+        let resizedDimensionImages = [];
         let resizedFileSizeImages = [];
         let currentSlide = 0;
 
@@ -480,7 +501,7 @@
                             height: img.height,
                             size: file.size,
                             name: file.name,
-                            element: img  // Store actual image element for canvas
+                            element: img
                         });
                         updateThumbnails();
                     };
@@ -515,9 +536,11 @@
 
         function clearAll() {
             uploadedImages = [];
+            resizedDimensionImages = [];
             resizedFileSizeImages = [];
             updateThumbnails();
             carouselSection.classList.remove('active');
+            carouselDownloadBar.classList.remove('active');
             fileSizeResults.innerHTML = '';
             downloadAllBar.classList.remove('active');
             carouselContainer.innerHTML = '<div style="color:#888;">Click "Apply & View Carousel" to preview</div>';
@@ -533,7 +556,7 @@
             const targetW = parseInt(targetWidthInput.value) || 800;
             const targetH = parseInt(targetHeightInput.value) || null;
 
-            const resized = uploadedImages.map(img => {
+            resizedDimensionImages = uploadedImages.map(img => {
                 const canvas = document.createElement('canvas');
                 const ctx = canvas.getContext('2d');
                 let newW = targetW;
@@ -548,12 +571,14 @@
                     src: canvas.toDataURL('image/jpeg', 0.92),
                     name: img.name,
                     width: newW,
-                    height: newH
+                    height: newH,
+                    originalName: img.name
                 };
             });
 
-            buildCarousel(resized);
+            buildCarousel(resizedDimensionImages);
             carouselSection.classList.add('active');
+            carouselDownloadBar.classList.add('active');
             carouselSection.scrollIntoView({ behavior: 'smooth' });
         });
 
@@ -606,9 +631,34 @@
             if (e.key === 'ArrowRight') showSlide(currentSlide + 1, slides.length);
         });
 
+        // Option 1: Download buttons
+        downloadCurrentBtn.addEventListener('click', () => {
+            if (!resizedDimensionImages.length) return;
+            const img = resizedDimensionImages[currentSlide];
+            const link = document.createElement('a');
+            link.href = img.src;
+            link.download = 'resized_' + img.originalName.replace(/\.[^/.]+$/, '') + '.jpg';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        });
+
+        downloadAllDimensionsBtn.addEventListener('click', () => {
+            if (!resizedDimensionImages.length) return;
+            resizedDimensionImages.forEach((img, i) => {
+                setTimeout(() => {
+                    const link = document.createElement('a');
+                    link.href = img.src;
+                    link.download = 'resized_' + img.originalName.replace(/\.[^/.]+$/, '') + '.jpg';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                }, i * 300);
+            });
+        });
+
         // ================= OPTION 2: FILE SIZE =================
         
-        // Helper: create white-background canvas
         function createCanvas(w, h) {
             const c = document.createElement('canvas');
             c.width = w; 
@@ -619,18 +669,15 @@
             return c;
         }
 
-        // Helper: get blob from canvas
         function getBlob(canvas, quality) {
             return new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', quality));
         }
 
-        // Core resize-to-KB engine
         async function resizeToTargetKB(imgData, targetKB) {
             const targetBytes = targetKB * 1024;
             let canvas = createCanvas(imgData.width, imgData.height);
             canvas.getContext('2d').drawImage(imgData.element, 0, 0);
 
-            // If target is larger than original, keep original quality
             const origBlob = await getBlob(canvas, 0.92);
             if (targetBytes >= origBlob.size) {
                 return {
@@ -643,7 +690,6 @@
                 };
             }
 
-            // Binary search quality at original dimensions
             let minQ = 0, maxQ = 1.0, bestBlob = null, bestDiff = Infinity;
             for (let i = 0; i < 12; i++) {
                 const mid = (minQ + maxQ) / 2;
@@ -657,7 +703,6 @@
                 else minQ = mid;
             }
 
-            // If still too big, scale down dimensions
             if (bestBlob.size > targetBytes) {
                 const scale = Math.sqrt(targetBytes / bestBlob.size);
                 const newW = Math.max(1, Math.floor(imgData.width * scale));
@@ -756,7 +801,6 @@
             });
         }
 
-        // Expose to global scope for onclick handlers
         window.downloadFileSizeImage = function(index) {
             const img = resizedFileSizeImages[index];
             const link = document.createElement('a');
