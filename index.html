@@ -1,0 +1,777 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Resizer — Dimensions & File Size</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: #333;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+        h1 {
+            text-align: center;
+            color: white;
+            margin-bottom: 20px;
+            font-size: 2.2rem;
+            text-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        }
+        .panel {
+            background: white;
+            border-radius: 16px;
+            padding: 25px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.15);
+        }
+        .drop-zone {
+            border: 3px dashed #667eea;
+            border-radius: 12px;
+            padding: 50px 20px;
+            text-align: center;
+            background: #f8f9ff;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            margin-bottom: 20px;
+        }
+        .drop-zone:hover, .drop-zone.dragover {
+            background: #eef1ff;
+            border-color: #764ba2;
+            transform: scale(1.01);
+        }
+        .drop-zone-text { font-size: 1.1rem; color: #555; }
+        .drop-zone-sub { font-size: 0.9rem; color: #888; margin-top: 5px; }
+        .controls {
+            display: flex;
+            gap: 15px;
+            align-items: flex-end;
+            flex-wrap: wrap;
+        }
+        .input-group {
+            flex: 1;
+            min-width: 180px;
+        }
+        .input-group label {
+            display: block;
+            margin-bottom: 6px;
+            font-weight: 600;
+            color: #444;
+            font-size: 0.95rem;
+        }
+        .input-group input {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 1rem;
+            transition: border-color 0.3s;
+        }
+        .input-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        .btn {
+            padding: 12px 28px;
+            border: none;
+            border-radius: 10px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .btn-secondary {
+            background: #f0f0f0;
+            color: #555;
+        }
+        .btn-secondary:hover { background: #e0e0e0; }
+        .btn-success {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            color: white;
+        }
+        .btn-success:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(17, 153, 142, 0.4);
+        }
+        .thumbnails {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+            gap: 10px;
+            margin-top: 15px;
+        }
+        .thumb {
+            position: relative;
+            border-radius: 8px;
+            overflow: hidden;
+            aspect-ratio: 1;
+            background: #f0f0f0;
+        }
+        .thumb img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .thumb .remove {
+            position: absolute;
+            top: 4px;
+            right: 4px;
+            background: rgba(255,0,0,0.8);
+            color: white;
+            border: none;
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 14px;
+            line-height: 1;
+        }
+        .thumb .info {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(0,0,0,0.6);
+            color: white;
+            font-size: 10px;
+            padding: 3px 6px;
+            text-align: center;
+        }
+        .counter {
+            text-align: center;
+            color: #666;
+            margin-bottom: 10px;
+            font-size: 0.95rem;
+        }
+        .hidden-input { display: none; }
+
+        /* Mode Toggle */
+        .mode-toggle {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .mode-btn {
+            padding: 12px 24px;
+            border: 2px solid white;
+            background: rgba(255,255,255,0.2);
+            color: white;
+            border-radius: 30px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s;
+            backdrop-filter: blur(10px);
+        }
+        .mode-btn.active {
+            background: white;
+            color: #764ba2;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.2);
+        }
+        .mode-btn:hover:not(.active) {
+            background: rgba(255,255,255,0.35);
+        }
+
+        /* Option Panels */
+        .option-panel { display: none; }
+        .option-panel.active { display: block; }
+
+        /* Carousel */
+        .carousel-section { display: none; }
+        .carousel-section.active { display: block; }
+        .carousel-container {
+            position: relative;
+            background: #1a1a2e;
+            border-radius: 16px;
+            overflow: hidden;
+            height: 500px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .carousel-slide {
+            display: none;
+            text-align: center;
+            padding: 20px;
+            width: 100%;
+        }
+        .carousel-slide.active { display: block; }
+        .carousel-slide img {
+            max-width: 100%;
+            max-height: 420px;
+            border-radius: 8px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+        .carousel-slide .filename {
+            color: #aaa;
+            margin-top: 10px;
+            font-size: 0.9rem;
+        }
+        .carousel-nav {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(255,255,255,0.15);
+            color: white;
+            border: none;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            font-size: 24px;
+            cursor: pointer;
+            backdrop-filter: blur(10px);
+            transition: all 0.3s;
+        }
+        .carousel-nav:hover { background: rgba(255,255,255,0.3); }
+        .carousel-prev { left: 20px; }
+        .carousel-next { right: 20px; }
+        .carousel-dots {
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            margin-top: 15px;
+        }
+        .dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #ccc;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .dot.active {
+            background: #667eea;
+            width: 28px;
+            border-radius: 5px;
+        }
+
+        /* File Size Results */
+        .results-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+        .result-card {
+            background: #f8f9ff;
+            border: 2px solid #e0e0e0;
+            border-radius: 12px;
+            padding: 15px;
+            text-align: center;
+            transition: all 0.3s;
+        }
+        .result-card:hover {
+            border-color: #667eea;
+            transform: translateY(-3px);
+            box-shadow: 0 5px 15px rgba(102,126,234,0.15);
+        }
+        .result-card img {
+            width: 100%;
+            height: 160px;
+            object-fit: cover;
+            border-radius: 8px;
+            margin-bottom: 10px;
+        }
+        .result-card .sizes {
+            font-size: 0.9rem;
+            color: #555;
+            margin-bottom: 10px;
+        }
+        .result-card .sizes span {
+            display: inline-block;
+            margin: 0 8px;
+        }
+        .size-old { text-decoration: line-through; color: #999; }
+        .size-new { color: #11998e; font-weight: 700; }
+        .badge {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+        .badge-success { background: #d4edda; color: #155724; }
+        .badge-warn { background: #fff3cd; color: #856404; }
+        .progress-bar {
+            width: 100%;
+            height: 6px;
+            background: #e0e0e0;
+            border-radius: 3px;
+            margin: 15px 0;
+            overflow: hidden;
+            display: none;
+        }
+        .progress-bar.active { display: block; }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            width: 0%;
+            transition: width 0.3s;
+            border-radius: 3px;
+        }
+        .download-all-bar {
+            text-align: center;
+            margin-top: 20px;
+            display: none;
+        }
+        .download-all-bar.active { display: block; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🖼️ Image Resizer</h1>
+        
+        <!-- Mode Selector -->
+        <div class="mode-toggle">
+            <button class="mode-btn active" data-mode="dimensions">Option 1: Resize by Dimensions</button>
+            <button class="mode-btn" data-mode="filesize">Option 2: Resize by File Size</button>
+        </div>
+
+        <!-- Shared Upload Panel -->
+        <div class="panel">
+            <div class="drop-zone" id="dropZone">
+                <span style="font-size: 48px;">📁</span>
+                <div class="drop-zone-text">Drag & drop images here</div>
+                <div class="drop-zone-sub">or click to browse (JPG, PNG, WEBP)</div>
+            </div>
+            <input type="file" id="fileInput" class="hidden-input" multiple accept="image/*">
+            <div class="counter" id="counter">No images uploaded</div>
+            <div class="thumbnails" id="thumbnails"></div>
+        </div>
+
+        <!-- OPTION 1: Dimensions -->
+        <div class="panel option-panel active" id="panel-dimensions">
+            <h2 style="margin-bottom: 15px; color: #444;">📐 Resize by Pixel Dimensions</h2>
+            <div class="controls">
+                <div class="input-group">
+                    <label for="targetWidth">Target Width (px)</label>
+                    <input type="number" id="targetWidth" value="800" min="50" max="4000">
+                </div>
+                <div class="input-group">
+                    <label for="targetHeight">Target Height (px) — optional</label>
+                    <input type="number" id="targetHeight" placeholder="Auto (keeps ratio)" min="50" max="4000">
+                </div>
+                <button class="btn btn-primary" id="applyDimensionsBtn" disabled>✨ Apply & View Carousel</button>
+                <button class="btn btn-secondary" id="clearBtn">Clear All</button>
+            </div>
+        </div>
+
+        <div class="panel carousel-section" id="carouselSection">
+            <h2 style="margin-bottom: 15px; color: #444;">📸 Resized Image Carousel</h2>
+            <div class="carousel-container" id="carouselContainer">
+                <div style="color:#888;">Click "Apply & View Carousel" to preview</div>
+            </div>
+            <div class="carousel-dots" id="carouselDots"></div>
+        </div>
+
+        <!-- OPTION 2: File Size -->
+        <div class="panel option-panel" id="panel-filesize">
+            <h2 style="margin-bottom: 15px; color: #444;">🗜️ Resize by File Size (KB)</h2>
+            <div class="controls">
+                <div class="input-group">
+                    <label for="targetKB">Target File Size (KB)</label>
+                    <input type="number" id="targetKB" value="100" min="1" max="10000">
+                </div>
+                <button class="btn btn-primary" id="applyFileSizeBtn" disabled>⚡ Apply Changes</button>
+                <button class="btn btn-secondary" id="clearBtn2">Clear All</button>
+            </div>
+            <div class="progress-bar" id="progressBar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <div id="fileSizeResults"></div>
+            <div class="download-all-bar" id="downloadAllBar">
+                <button class="btn btn-success" id="downloadAllFileSizeBtn">⬇️ Download All Resized Images</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Elements
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const thumbnails = document.getElementById('thumbnails');
+        const counter = document.getElementById('counter');
+        const modeBtns = document.querySelectorAll('.mode-btn');
+        const optionPanels = document.querySelectorAll('.option-panel');
+        
+        // Option 1
+        const applyDimensionsBtn = document.getElementById('applyDimensionsBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        const targetWidthInput = document.getElementById('targetWidth');
+        const targetHeightInput = document.getElementById('targetHeight');
+        const carouselSection = document.getElementById('carouselSection');
+        const carouselContainer = document.getElementById('carouselContainer');
+        const carouselDots = document.getElementById('carouselDots');
+        
+        // Option 2
+        const applyFileSizeBtn = document.getElementById('applyFileSizeBtn');
+        const clearBtn2 = document.getElementById('clearBtn2');
+        const targetKBInput = document.getElementById('targetKB');
+        const fileSizeResults = document.getElementById('fileSizeResults');
+        const progressBar = document.getElementById('progressBar');
+        const progressFill = document.getElementById('progressFill');
+        const downloadAllBar = document.getElementById('downloadAllBar');
+        const downloadAllFileSizeBtn = document.getElementById('downloadAllFileSizeBtn');
+
+        let uploadedImages = [];
+        let resizedFileSizeImages = [];
+        let currentSlide = 0;
+
+        // Mode Switching
+        modeBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                modeBtns.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                const mode = btn.dataset.mode;
+                optionPanels.forEach(p => p.classList.remove('active'));
+                document.getElementById('panel-' + mode).classList.add('active');
+                if (mode === 'dimensions') {
+                    carouselSection.classList.add('active');
+                } else {
+                    carouselSection.classList.remove('active');
+                }
+            });
+        });
+
+        // Drag & Drop + File Input
+        dropZone.addEventListener('click', () => fileInput.click());
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            handleFiles(e.dataTransfer.files);
+        });
+        fileInput.addEventListener('change', (e) => handleFiles(e.target.files));
+
+        function handleFiles(files) {
+            Array.from(files).forEach(file => {
+                if (!file.type.startsWith('image/')) return;
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        uploadedImages.push({
+                            file: file,
+                            src: e.target.result,
+                            width: img.width,
+                            height: img.height,
+                            size: file.size,
+                            name: file.name,
+                            element: img  // Store actual image element for canvas
+                        });
+                        updateThumbnails();
+                    };
+                    img.src = e.target.result;
+                };
+                reader.readAsDataURL(file);
+            });
+        }
+
+        function updateThumbnails() {
+            thumbnails.innerHTML = '';
+            uploadedImages.forEach((img, index) => {
+                const div = document.createElement('div');
+                div.className = 'thumb';
+                div.innerHTML = `
+                    <img src="${img.src}" alt="${img.name}">
+                    <button class="remove" onclick="removeImage(${index})">×</button>
+                    <div class="info">${img.width}×${img.height}</div>
+                `;
+                thumbnails.appendChild(div);
+            });
+            const c = uploadedImages.length;
+            counter.textContent = c ? `${c} image${c!==1?'s':''} uploaded` : 'No images uploaded';
+            applyDimensionsBtn.disabled = c === 0;
+            applyFileSizeBtn.disabled = c === 0;
+        }
+
+        function removeImage(index) {
+            uploadedImages.splice(index, 1);
+            updateThumbnails();
+        }
+
+        function clearAll() {
+            uploadedImages = [];
+            resizedFileSizeImages = [];
+            updateThumbnails();
+            carouselSection.classList.remove('active');
+            fileSizeResults.innerHTML = '';
+            downloadAllBar.classList.remove('active');
+            carouselContainer.innerHTML = '<div style="color:#888;">Click "Apply & View Carousel" to preview</div>';
+            carouselDots.innerHTML = '';
+        }
+
+        clearBtn.addEventListener('click', clearAll);
+        clearBtn2.addEventListener('click', clearAll);
+
+        // ================= OPTION 1: DIMENSIONS =================
+        applyDimensionsBtn.addEventListener('click', () => {
+            if (!uploadedImages.length) return;
+            const targetW = parseInt(targetWidthInput.value) || 800;
+            const targetH = parseInt(targetHeightInput.value) || null;
+
+            const resized = uploadedImages.map(img => {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                let newW = targetW;
+                let newH = targetH;
+                if (!newH) {
+                    newH = Math.round(targetW * (img.height / img.width));
+                }
+                canvas.width = newW;
+                canvas.height = newH;
+                ctx.drawImage(img.element, 0, 0, newW, newH);
+                return {
+                    src: canvas.toDataURL('image/jpeg', 0.92),
+                    name: img.name,
+                    width: newW,
+                    height: newH
+                };
+            });
+
+            buildCarousel(resized);
+            carouselSection.classList.add('active');
+            carouselSection.scrollIntoView({ behavior: 'smooth' });
+        });
+
+        function buildCarousel(images) {
+            carouselContainer.innerHTML = '';
+            carouselDots.innerHTML = '';
+            if (!images.length) return;
+
+            const prevBtn = document.createElement('button');
+            prevBtn.className = 'carousel-nav carousel-prev';
+            prevBtn.innerHTML = '‹';
+            prevBtn.onclick = () => showSlide(currentSlide - 1, images.length);
+            const nextBtn = document.createElement('button');
+            nextBtn.className = 'carousel-nav carousel-next';
+            nextBtn.innerHTML = '›';
+            nextBtn.onclick = () => showSlide(currentSlide + 1, images.length);
+            carouselContainer.appendChild(prevBtn);
+            carouselContainer.appendChild(nextBtn);
+
+            images.forEach((img, index) => {
+                const slide = document.createElement('div');
+                slide.className = 'carousel-slide' + (index === 0 ? ' active' : '');
+                slide.innerHTML = `
+                    <img src="${img.src}" alt="${img.name}">
+                    <div class="filename">${img.name} — ${img.width}×${img.height}px</div>
+                `;
+                carouselContainer.appendChild(slide);
+
+                const dot = document.createElement('div');
+                dot.className = 'dot' + (index === 0 ? ' active' : '');
+                dot.onclick = () => showSlide(index, images.length);
+                carouselDots.appendChild(dot);
+            });
+            currentSlide = 0;
+        }
+
+        function showSlide(index, total) {
+            if (index < 0) index = total - 1;
+            if (index >= total) index = 0;
+            currentSlide = index;
+            document.querySelectorAll('.carousel-slide').forEach((s, i) => s.classList.toggle('active', i === index));
+            document.querySelectorAll('.dot').forEach((d, i) => d.classList.toggle('active', i === index));
+        }
+
+        document.addEventListener('keydown', (e) => {
+            if (!carouselSection.classList.contains('active')) return;
+            const slides = document.querySelectorAll('.carousel-slide');
+            if (!slides.length) return;
+            if (e.key === 'ArrowLeft') showSlide(currentSlide - 1, slides.length);
+            if (e.key === 'ArrowRight') showSlide(currentSlide + 1, slides.length);
+        });
+
+        // ================= OPTION 2: FILE SIZE =================
+        
+        // Helper: create white-background canvas
+        function createCanvas(w, h) {
+            const c = document.createElement('canvas');
+            c.width = w; 
+            c.height = h;
+            const x = c.getContext('2d');
+            x.fillStyle = '#FFFFFF';
+            x.fillRect(0, 0, w, h);
+            return c;
+        }
+
+        // Helper: get blob from canvas
+        function getBlob(canvas, quality) {
+            return new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', quality));
+        }
+
+        // Core resize-to-KB engine
+        async function resizeToTargetKB(imgData, targetKB) {
+            const targetBytes = targetKB * 1024;
+            let canvas = createCanvas(imgData.width, imgData.height);
+            canvas.getContext('2d').drawImage(imgData.element, 0, 0);
+
+            // If target is larger than original, keep original quality
+            const origBlob = await getBlob(canvas, 0.92);
+            if (targetBytes >= origBlob.size) {
+                return {
+                    blob: origBlob,
+                    url: URL.createObjectURL(origBlob),
+                    size: origBlob.size,
+                    width: imgData.width,
+                    height: imgData.height,
+                    keptOriginal: true
+                };
+            }
+
+            // Binary search quality at original dimensions
+            let minQ = 0, maxQ = 1.0, bestBlob = null, bestDiff = Infinity;
+            for (let i = 0; i < 12; i++) {
+                const mid = (minQ + maxQ) / 2;
+                const b = await getBlob(canvas, mid);
+                const diff = Math.abs(b.size - targetBytes);
+                if (diff < bestDiff) {
+                    bestDiff = diff;
+                    bestBlob = b;
+                }
+                if (b.size > targetBytes) maxQ = mid;
+                else minQ = mid;
+            }
+
+            // If still too big, scale down dimensions
+            if (bestBlob.size > targetBytes) {
+                const scale = Math.sqrt(targetBytes / bestBlob.size);
+                const newW = Math.max(1, Math.floor(imgData.width * scale));
+                const newH = Math.max(1, Math.floor(imgData.height * scale));
+                canvas = createCanvas(newW, newH);
+                canvas.getContext('2d').drawImage(imgData.element, 0, 0, newW, newH);
+
+                minQ = 0; maxQ = 1.0; bestBlob = null; bestDiff = Infinity;
+                for (let i = 0; i < 12; i++) {
+                    const mid = (minQ + maxQ) / 2;
+                    const b = await getBlob(canvas, mid);
+                    const diff = Math.abs(b.size - targetBytes);
+                    if (diff < bestDiff) {
+                        bestDiff = diff;
+                        bestBlob = b;
+                    }
+                    if (b.size > targetBytes) maxQ = mid;
+                    else minQ = mid;
+                }
+            }
+
+            return {
+                blob: bestBlob,
+                url: URL.createObjectURL(bestBlob),
+                size: bestBlob.size,
+                width: canvas.width,
+                height: canvas.height,
+                keptOriginal: false
+            };
+        }
+
+        applyFileSizeBtn.addEventListener('click', async () => {
+            if (!uploadedImages.length) return;
+            const targetKB = parseInt(targetKBInput.value) || 100;
+            
+            fileSizeResults.innerHTML = '';
+            downloadAllBar.classList.remove('active');
+            progressBar.classList.add('active');
+            resizedFileSizeImages = [];
+            applyFileSizeBtn.disabled = true;
+
+            for (let i = 0; i < uploadedImages.length; i++) {
+                const percent = Math.round(((i) / uploadedImages.length) * 100);
+                progressFill.style.width = percent + '%';
+                
+                const result = await resizeToTargetKB(uploadedImages[i], targetKB);
+                resizedFileSizeImages.push({
+                    ...result,
+                    originalName: uploadedImages[i].name,
+                    originalSize: uploadedImages[i].size
+                });
+            }
+            progressFill.style.width = '100%';
+            setTimeout(() => progressBar.classList.remove('active'), 500);
+
+            renderFileSizeResults();
+            downloadAllBar.classList.add('active');
+            applyFileSizeBtn.disabled = false;
+            document.getElementById('panel-filesize').scrollIntoView({ behavior: 'smooth', block: 'end' });
+        });
+
+        function formatKB(bytes) {
+            return (bytes / 1024).toFixed(1) + ' KB';
+        }
+
+        function renderFileSizeResults() {
+            fileSizeResults.innerHTML = '<h3 style="margin-bottom:10px;color:#444;">Results</h3><div class="results-grid" id="resultsGrid"></div>';
+            const grid = document.getElementById('resultsGrid');
+            
+            resizedFileSizeImages.forEach((img, index) => {
+                const saved = img.originalSize - img.size;
+                const savedPercent = ((saved / img.originalSize) * 100).toFixed(0);
+                const badge = img.keptOriginal 
+                    ? '<span class="badge badge-warn">Already under target</span>' 
+                    : '<span class="badge badge-success">Resized</span>';
+                
+                const card = document.createElement('div');
+                card.className = 'result-card';
+                card.innerHTML = `
+                    ${badge}
+                    <img src="${img.url}" alt="${img.originalName}">
+                    <div style="font-weight:600;margin-bottom:5px;word-break:break-all;">${img.originalName}</div>
+                    <div class="sizes">
+                        <span class="size-old">${formatKB(img.originalSize)}</span>
+                        →
+                        <span class="size-new">${formatKB(img.size)}</span>
+                    </div>
+                    <div style="font-size:0.8rem;color:#777;margin-bottom:10px;">
+                        ${img.width}×${img.height}px • Saved ${savedPercent}%
+                    </div>
+                    <button class="btn btn-primary" onclick="downloadFileSizeImage(${index})" style="padding:8px 20px;font-size:0.9rem;">
+                        ⬇️ Download
+                    </button>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        // Expose to global scope for onclick handlers
+        window.downloadFileSizeImage = function(index) {
+            const img = resizedFileSizeImages[index];
+            const link = document.createElement('a');
+            link.href = img.url;
+            link.download = 'resized_' + img.originalName.replace(/\.[^/.]+$/, '') + '.jpg';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        };
+
+        downloadAllFileSizeBtn.addEventListener('click', () => {
+            resizedFileSizeImages.forEach((_, i) => {
+                setTimeout(() => downloadFileSizeImage(i), i * 300);
+            });
+        });
+    </script>
+</body>
+</html>
