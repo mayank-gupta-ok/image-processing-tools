@@ -658,117 +658,86 @@
             });
         });
 
-        // ================= OPTION 2: FILE SIZE =================
+        // ================= OPTION 2: FILE SIZE (FIXED) =================
         
-        function createCanvas(w, h) {
-            const c = document.createElement('canvas');
-            c.width = w; 
-            c.height = h;
-            const x = c.getContext('2d');
-            x.fillStyle = '#FFFFFF';
-            x.fillRect(0, 0, w, h);
-            return c;
-        }
-
-        function getBlob(canvas, quality) {
-            return new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', quality));
-        }
-
-        // FIXED: Handles both INCREASE and DECREASE of file size
+        // FIXED: Keeps original dimensions EXACTLY. Only changes JPEG quality.
+        // If target > max quality size, returns max quality (cannot increase beyond that without changing dimensions).
         async function resizeToTargetKB(imgData, targetKB) {
             const targetBytes = targetKB * 1024;
-            const MAX_DIM = 4000; // safety cap to prevent browser crash
             
-            // Helper: render at specific dimensions & quality
-            async function render(w, h, q) {
-                const c = createCanvas(w, h);
-                c.getContext('2d').drawImage(imgData.element, 0, 0, w, h);
-                const blob = await getBlob(c, q);
-                return { blob, width: w, height: h, size: blob.size };
+            // Create canvas at EXACT original dimensions — never change width/height
+            const canvas = document.createElement('canvas');
+            canvas.width = imgData.width;
+            canvas.height = imgData.height;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillRect(0, 0, imgData.width, imgData.height);
+            ctx.drawImage(imgData.element, 0, 0, imgData.width, imgData.height);
+            
+            // Helper: export at specific quality
+            const exportAt = (q) => new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', q));
+            
+            // Test boundaries
+            const blobMax = await exportAt(1.0);   // maximum possible size at these dimensions
+            const blobMin = await exportAt(0.01);  // minimum practical size
+            
+            // Target is larger than max possible → return max quality (best we can do without resizing)
+            if (targetBytes >= blobMax.size) {
+                return {
+                    blob: blobMax,
+                    url: URL.createObjectURL(blobMax),
+                    size: blobMax.size,
+                    width: imgData.width,
+                    height: imgData.height,
+                    keptOriginal: Math.abs(blobMax.size - imgData.size) < 1024,
+                    maxedOut: targetBytes > blobMax.size
+                };
             }
             
-            // Start with original dimensions at maximum quality (1.0)
-            let current = await render(imgData.width, imgData.height, 1.0);
-            
-            // If already very close to target (within 3%), keep it
-            if (Math.abs(current.size - targetBytes) <= targetBytes * 0.03) {
-                return { ...current, url: URL.createObjectURL(current.blob), keptOriginal: true };
+            // Target is smaller than min possible → return min quality
+            if (targetBytes <= blobMin.size) {
+                return {
+                    blob: blobMin,
+                    url: URL.createObjectURL(blobMin),
+                    size: blobMin.size,
+                    width: imgData.width,
+                    height: imgData.height,
+                    keptOriginal: false,
+                    maxedOut: false
+                };
             }
             
-            if (current.size < targetBytes) {
-                // ===== INCREASE SIZE: upscale dimensions =====
-                // File size roughly scales with pixel count, so:
-                // scale factor ≈ sqrt(target / current)
-                let scale = Math.sqrt(targetBytes / current.size);
+            // Binary search quality between 0.01 and 1.0 to hit target
+            let minQ = 0.01, maxQ = 1.0;
+            let bestBlob = blobMax;
+            let bestDiff = Math.abs(blobMax.size - targetBytes);
+            
+            for (let i = 0; i < 16; i++) {
+                const mid = (minQ + maxQ) / 2;
+                const blob = await exportAt(mid);
+                const diff = Math.abs(blob.size - targetBytes);
                 
-                // Cap scale so we don't exceed MAX_DIM
-                const maxScale = MAX_DIM / Math.max(imgData.width, imgData.height);
-                if (scale > maxScale) scale = maxScale;
-                
-                let low = 1.0, high = Math.max(scale, 1.05);
-                let best = current;
-                let bestDiff = Math.abs(current.size - targetBytes);
-                
-                // Binary-search the exact scale factor
-                for (let i = 0; i < 14; i++) {
-                    const mid = (low + high) / 2;
-                    const w = Math.max(1, Math.floor(imgData.width * mid));
-                    const h = Math.max(1, Math.floor(imgData.height * mid));
-                    const r = await render(w, h, 1.0);
-                    const diff = Math.abs(r.size - targetBytes);
-                    
-                    if (diff < bestDiff) {
-                        bestDiff = diff;
-                        best = r;
-                    }
-                    if (r.size < targetBytes) low = mid;
-                    else high = mid;
-                }
-                return { ...best, url: URL.createObjectURL(best.blob), keptOriginal: false };
-                
-            } else {
-                // ===== DECREASE SIZE: lower quality, then dimensions =====
-                let minQ = 0, maxQ = 1.0;
-                let best = current;
-                let bestDiff = Math.abs(current.size - targetBytes);
-                
-                // Binary-search quality at original dimensions
-                for (let i = 0; i < 12; i++) {
-                    const mid = (minQ + maxQ) / 2;
-                    const r = await render(imgData.width, imgData.height, mid);
-                    const diff = Math.abs(r.size - targetBytes);
-                    if (diff < bestDiff) {
-                        bestDiff = diff;
-                        best = r;
-                    }
-                    if (r.size > targetBytes) maxQ = mid;
-                    else minQ = mid;
+                if (diff < bestDiff) {
+                    bestDiff = diff;
+                    bestBlob = blob;
                 }
                 
-                // If still too big, shrink dimensions
-                if (best.size > targetBytes) {
-                    const scale = Math.sqrt(targetBytes / best.size);
-                    const w = Math.max(1, Math.floor(imgData.width * scale));
-                    const h = Math.max(1, Math.floor(imgData.height * scale));
-                    
-                    minQ = 0; maxQ = 1.0;
-                    best = await render(w, h, 1.0);
-                    bestDiff = Math.abs(best.size - targetBytes);
-                    
-                    for (let i = 0; i < 12; i++) {
-                        const mid = (minQ + maxQ) / 2;
-                        const r = await render(w, h, mid);
-                        const diff = Math.abs(r.size - targetBytes);
-                        if (diff < bestDiff) {
-                            bestDiff = diff;
-                            best = r;
-                        }
-                        if (r.size > targetBytes) maxQ = mid;
-                        else minQ = mid;
-                    }
+                if (blob.size > targetBytes) {
+                    maxQ = mid;
+                } else {
+                    minQ = mid;
                 }
-                return { ...best, url: URL.createObjectURL(best.blob), keptOriginal: false };
             }
+            
+            return {
+                blob: bestBlob,
+                url: URL.createObjectURL(bestBlob),
+                size: bestBlob.size,
+                width: imgData.width,
+                height: imgData.height,
+                keptOriginal: false,
+                maxedOut: false
+            };
         }
 
         applyFileSizeBtn.addEventListener('click', async () => {
@@ -812,15 +781,17 @@
             resizedFileSizeImages.forEach((img, index) => {
                 const diff = img.size - img.originalSize;
                 const diffPercent = Math.abs((diff / img.originalSize) * 100).toFixed(0);
-                const changeText = diff >= 0 ? `Increased ${diffPercent}%` : `Saved ${diffPercent}%`;
+                const changeText = diff >= 0 ? `+${diffPercent}%` : `-${diffPercent}%`;
                 
                 let badge;
-                if (img.keptOriginal) {
+                if (img.maxedOut) {
+                    badge = '<span class="badge badge-info">Max quality (cannot go larger)</span>';
+                } else if (img.keptOriginal) {
                     badge = '<span class="badge badge-warn">Already at target</span>';
                 } else if (diff > 0) {
-                    badge = '<span class="badge badge-info">Upscaled</span>';
+                    badge = '<span class="badge badge-success">Quality increased</span>';
                 } else {
-                    badge = '<span class="badge badge-success">Resized</span>';
+                    badge = '<span class="badge badge-success">Compressed</span>';
                 }
                 
                 const card = document.createElement('div');
